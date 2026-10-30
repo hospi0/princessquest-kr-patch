@@ -120,6 +120,8 @@ def main():
         ko = re.sub(r'^([^％「」]{1,14}?) ?([A-Za-zＡ-Ｚ])(?=％「)', lambda mm: mm.group(1) + zen(mm.group(2)), ko)   # 화자 기호 붙여 쓰고 전각
         ko = zen(ko).replace('—', '―').replace('ㅡ', '―').replace('S·', 'Ｓ・').replace('M·', 'Ｍ・').replace('Ｓ·', 'Ｓ・').replace('Ｍ·', 'Ｍ・')
         ko = re.sub(r' *％ *', '％', ko)                     # 줄바꿈 앞뒤 반각 공백(줄 첫머리 빈칸) 지움
+        ko = ko.replace('っ', '').replace('ッ', '').replace('은(는)', '')   # 2026-10-30 하스피 버그: «요ーっ» 일본어 촉음 · «은(는)» 삭제
+        ko = {2849: ' 승리!', 2853: ' 레스알 사용!'}.get(n, ko)          # 2026-10-30 하스피 «승리! 사용! 이렇게» (앞에 게임이 이름을 붙임)
         for t in '％「」『』':
             if jp.count(t) != ko.count(t): raise SystemExit('토큰 %s 어긋남 %d «%s» / «%s»' % (t, n, jp, ko))
         ko2, why = (ko, '') if w.startswith('START.MES') else rewrap(ko, jp)   # 저장 경고 화면은 자동 줄 접기(원문 52자 줄)

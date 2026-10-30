@@ -72,7 +72,13 @@ SQUEEZE_PUNCT = ',.!?:;)]}\'"~、。，．！？：；）］｝」』】〉》�
 _SQ = re.compile('([' + re.escape(SQUEEZE_PUNCT) + '])[ 　](?![ 　])')
 
 
+_DOTS = re.compile(r'(「?)([・％]+)(」?)')
+
+
 def squeeze(t):
+    m = _DOTS.fullmatch(t)
+    if m and '・' in t:                                 # 점만 있는 대사(원문 17·35·54점으로 늘어나는 연출) → 18점마다 «…» 하나(하스피 2026-10-30 «… 한개 …… 두개 ……… 세개»)
+        return m.group(1) + '…' * -(-m.group(2).count('・') // 18) + m.group(3)
     out = []
     for part in t.split('％'):
         part = re.sub(r'\.{3,}', '…', part)
@@ -104,37 +110,75 @@ def build_font(orig):
     return bytes(f)
 
 
-def encode_mes(data, ko=None, poc=False):
-    """ko: {오프셋: 번역문}. 전 대사 조각을 다시 인코딩한 새 MES 바이트."""
+PAGE_LINES = 3                          # 대사 창 = 3줄(이름 줄 포함) — 4째 줄은 첫 줄을 덮는다(2026-10-30 실기 스샷 PRO01 문지기)
+PAGE_BREAK = b'\x13\x3e\x03'            # 키 대기·창 비우기(원문 CITY.MES:0AA37 처럼 «…％» 뒤에 놓고 다음 쪽 이어 씀)
+
+
+PAGE_WIDTH = 18                         # 대사 한 줄 칸(띄어쓰기 = 전각 한 칸) — merge_ko.WIDTH 와 같음
+
+
+def reflow(lines):
+    """이름 줄 뒤 본문을 낱말 단위로 PAGE_WIDTH 칸에 다시 채움 → 줄 목록(낱말 하나가 폭 넘으면 None)"""
+    head = lines[:1] if len(lines) > 1 and lines[1].startswith('「') and '「' not in lines[0] else []
+    words = ' '.join(lines[len(head):]).split(' ')
+    out = []; cur = ''
+    for w in words:
+        if not w: continue
+        if len(w) > PAGE_WIDTH: return None
+        if cur and len(cur) + 1 + len(w) > PAGE_WIDTH: out.append(cur); cur = w
+        else: cur = cur + ' ' + w if cur else w
+    if cur: out.append(cur)
+    return head + out
+
+
+def paginate(t):
+    """번역문 4줄 이상 → 먼저 18칸으로 다시 채워 3줄 안이면 그것, 아니면 3줄씩 쪽(앞 쪽들은 원문처럼 «％»로 끝남)"""
+    segs = t.split('％'); tail = segs[-1] == ''
+    lines = segs[:-1] if tail else segs
+    if len(lines) <= PAGE_LINES: return [t]
+    if '　' not in t:                                   # 전각 공백 = 손으로 맞춘 자리(ぐぅ～ 등) — 다시 채우지 않음
+        r = reflow(lines)
+        if r and len(r) <= PAGE_LINES: return ['％'.join(r) + ('％' if tail else '')]
+    pg = [lines[i:i + PAGE_LINES] for i in range(0, len(lines), PAGE_LINES)]
+    return ['％'.join(p) + '％' for p in pg[:-1]] + ['％'.join(pg[-1]) + ('％' if tail else '')]
+
+
+def encode_mes(data, ko=None, poc=False, pages=True):
+    """ko: {오프셋: 번역문}. 전 대사 조각을 다시 인코딩한 새 MES 바이트. pages: 번역문 4줄 이상이면 3줄마다 쪽 나눔"""
     ko = ko or {}
     if not ko and not poc: return data                 # 번역 없는 파일(스태프 롤) = 원본 바이트 그대로(한자 칸은 reserved() 로 보존)
     m = mesparse.Mes(data).parse()
     texts = sorted((a, b) for k, a, b in m.items if k == 'text')
     strs = [(a, b, squeeze(ko[a]) if ko.get(a) else m.chars(a, b)) for a, b in texts]
+    strs = [(a, b, paginate(t) if pages and ko.get(a) else [t]) for a, b, t in strs]
     freq = collections.Counter()
-    for _, _, t in strs:
-        for ch in t: freq[code_of(ch, poc)] += 1
+    for _, _, ts in strs:
+        for t in ts:
+            for ch in t: freq[code_of(ch, poc)] += 1
     table = [c for c, _ in freq.most_common(128)]
     idx = {c: 0x80 + i for i, c in enumerate(table)}
     out = bytearray(struct.pack('<H', 2 + 2 * len(table)) + b''.join(struct.pack('>H', c) for c in table))
     p = m.hdr
-    for a, b, t in strs:
-        out += data[p:a]; enc = bytearray()
-        for ch in t:
-            c = code_of(ch, poc)
-            if c in idx: enc.append(idx[c])
-            else:
-                if not 0x81 <= c >> 8 <= 0x9F: raise ValueError('2바이트로 못 쓰는 코드 %04X (%r)' % (c, ch))
-                enc += bytes([(c >> 8) - 0x20, c & 0xFF])
-        if 0 in enc or 1 in enc: raise ValueError('텍스트에 00/01 바이트 @%X' % a)
-        if not enc: raise ValueError('빈 대사 @%X' % a)
-        out += enc; p = b
+    for a, b, ts in strs:
+        out += data[p:a]
+        for k, t in enumerate(ts):
+            enc = bytearray()
+            for ch in t:
+                c = code_of(ch, poc)
+                if c in idx: enc.append(idx[c])
+                else:
+                    if not 0x81 <= c >> 8 <= 0x9F: raise ValueError('2바이트로 못 쓰는 코드 %04X (%r)' % (c, ch))
+                    enc += bytes([(c >> 8) - 0x20, c & 0xFF])
+            if 0 in enc or 1 in enc: raise ValueError('텍스트에 00/01 바이트 @%X' % a)
+            if not enc: raise ValueError('빈 대사 @%X' % a)
+            out += (PAGE_BREAK if k else b'') + enc
+        p = b
     out += data[p:]
     if len(out) > MES_MAX: raise ValueError('MES 크기 %X > %X' % (len(out), MES_MAX))
-    # 다시 파싱해 구조 검산: 대사 조각 수·순서·내용이 의도와 같아야
+    # 다시 파싱해 구조 검산: 대사 조각 수·순서·내용이 의도와 같아야(쪽 나눈 조각은 쪽마다 한 조각)
     m2 = mesparse.Mes(bytes(out)).parse()
     got = [codes(m2, a, b) for k, a, b in sorted(m2.items, key=lambda x: x[1]) if k == 'text']
-    want = [[code_of(ch, poc) for ch in t] for _, _, t in strs]
+    want = [[code_of(ch, poc) for ch in t] for _, _, ts in strs for t in ts]
     if got != want: raise ValueError('재파싱 대사 불일치')
     if len(m2.unclosed) != len(m.unclosed): raise ValueError('블록 구조 바뀜')
     return bytes(out)

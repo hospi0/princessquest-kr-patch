@@ -4,7 +4,7 @@ r"""작은 글꼴(도구·장비·마법·전투 이름) 한글화(2026-10-30)
         스크립트(55개 MES)가 슬롯 300+I 로 칸을 잘라 등록: `0f 49 08 07 93 28` = I<100
   글자: 이름은 MES 안 `06 반각문자열 06` — 해석기 0x06006936 이 바이트를 표 0x06037244(99자)에서 찾아 슬롯 300+번호
         표에 없는 바이트 b → 코드 두 워드 교체(tools/build.py)로 슬롯 300+b. 빈 슬롯 = 272~299·400 이후(스테이트 11장 실측, 100~271 은 사용 중)
-  칸 배정: 표 안 가나 칸(ﾞﾟ 제외 — 다음 글자가 ﾞﾟ 면 x 안 나감 0x06006A26) + 칸 100~ (바이트 0x64~0xA0)
+  칸 배정: 표 안 가나 칸(ﾞﾟ 제외 — 다음 글자가 ﾞﾟ 면 x 안 나감 0x06006A26) + 칸 100~160 (바이트 0xE0~0xFF·0x89~0xA5, 슬롯 b+428)
   색: 잉크 = 줄별 04 04 22 21 21 20 20 20, 그림자 91 = (+1,+1)
   python tools/smallfont.py   → 이름표 검사 + 미리보기 work/shot/small_compare.png"""
 import os, re, sys, csv, unicodedata, collections
@@ -43,9 +43,9 @@ def names():
 
 
 def assign(syl):
-    """음절 → 리터럴 바이트. 표 안 가나 칸 먼저(슬롯 재사용), 그다음 바이트 0x64~ (슬롯 400~)"""
+    """음절 → 리터럴 바이트. 표 안 가나 칸 먼저(슬롯 재사용), 그다음 바이트 0xE0~0xFF·0x89~0xA5 (칸 100~160, 슬롯 b+428 = 565~683 — tools/build.py)"""
     table = [0xB1 + i for i in range(44)] + [0xDD] + [0xA7 + i for i in range(9)] + [0xA6]   # ｱ..ﾜ ﾝ ｧ..ｯ ｦ
-    extra = [b for b in range(0x64, 0xA1)]
+    extra = EXTRA_B
     latin = list(b'ZXQJ')                     # 라틴 칸 — 8×8 영문을 쓰는 리터럴 0개, 모자란 만큼만
     slots = table + extra + latin
     if len(syl) > len(slots): raise SystemExit('칸 모자람 %d > %d' % (len(syl), len(slots)))
@@ -55,9 +55,14 @@ def assign(syl):
 TBL = [0x20] + list(b'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ') + [0x20] * 3 + list(range(0xB1, 0xDD)) + [0xA6, 0xDD] + list(range(0xA7, 0xB0)) + [0xDE, 0xDF, 0x2D, 0x2B]
 
 
+# 2026-10-30: 표 밖 바이트 0x64~0xA0(슬롯 400~460) → 전투가 400~446 을 덮어 글자가 적 그림이 됨 —
+#   칸 100~131 = 바이트 0xE0~0xFF(슬롯 b+428 = 652~683) · 칸 132~160 = 0x89~0xA5(565~593), tools/build.py 반복문·A.BIN 과 짝
+EXTRA_B = list(range(0xE0, 0x100)) + list(range(0x89, 0xA6))
+
+
 def cell_of(b):
-    """바이트 → 칸 번호(슬롯 300+칸)"""
-    return TBL.index(b) if b in TBL else b
+    """바이트 → MWAKU 칸 번호(표 안 = 슬롯 300+칸, 표 밖 = 칸 100~160)"""
+    return TBL.index(b) if b in TBL else EXTRA_B.index(b) + 100
 
 
 def glyph(fnt, ch):

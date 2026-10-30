@@ -7,7 +7,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NAMES = {0: 'Princess Quest (Japan) (Rev A) (11M)'}
 
 
-def bin_path(n): return os.path.join(r'C:\claude\roms\ss', NAMES[n], NAMES[n] + ' (Track 1).bin')
+ROMS = r'D:\hospi\My Documents\한글패치\SS\ss'      # 원본(읽기만, 트랙 1 md5 aff63b85…) — 2026-10-30 하스피가 D: 로 옮김
+
+
+def bin_path(n): return os.path.join(ROMS, NAMES[n], NAMES[n] + ' (Track 1).bin')
 
 
 def sec(f, l, n=1):

@@ -9,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 VER = 'v0.9'
 XDELTA = r'C:\claude\utils\xdelta.exe'
 ROM = 'Princess Quest (Japan) (Rev A) (11M)'
-SRC = os.path.join(r'C:\claude\roms\ss', ROM)
+SRC = os.path.join(r'D:\hospi\My Documents\한글패치\SS\ss', ROM)      # 원본(읽기만) — 2026-10-30 D: 로 옮김
 OUT = os.path.join(ROOT, 'dist', 'build', ROM)
 NAME = 'PrincessQuest_KR_' + VER
 TITLE = '프린세스 퀘스트 (Princess Quest, 세가 새턴 일본판 Rev A) 한글 패치 ' + VER
@@ -51,7 +51,7 @@ README = """{title}
 
   - 대사·선택지 전체, 아이템 설명, 장소 이름, 저장·불러오기 화면
   - 도구·장비 이름, 전투의 인물·마법 이름(작은 글꼴)
-  - 메뉴 그림(도구·장비·세이브/로드·설정, 조사·마법·변신·강함, 구입·판매 등)
+  - 메뉴 그림(도구·장비·세이브/로드·설정, 조사·마법·변신·강함, 구입·판매, 전투 메뉴 공격·도구·도망·마법 등)
   - 타이틀 화면의 일본어 로고 문구와 이름 표기
   - 동영상 자막(오프닝 주제가 제외)
 

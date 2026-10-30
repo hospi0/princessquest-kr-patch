@@ -1,0 +1,12 @@
+work/
+my files/
+dist/
+__pycache__/
+!work/
+work/*
+!work/text/
+work/text/*
+!work/text/uniq.tsv
+!work/movie/
+work/movie/*
+!work/movie/subs.tsv
